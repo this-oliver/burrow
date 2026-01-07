@@ -1,6 +1,6 @@
 # Chronicle
 
-Automated backup tool for local and remote directories with comprehensive metadata tracking.
+Automated backup tool for local and remote directories.
 
 ## Features
 
@@ -251,7 +251,3 @@ The tool provides detailed error messages for common issues:
 - Verify the source directory path is correct
 - Check directory permissions
 - Use absolute paths when possible
-
-## License
-
-k8s-backup - Automated backup solution for local and remote directories.
