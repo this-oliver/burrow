@@ -1,4 +1,4 @@
-# Chronicle
+# Burrow 🐿️
 
 Automated backup tool for local and remote directories.
 
