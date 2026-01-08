@@ -1,0 +1,28 @@
+name: Continuous Integration
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches: [main]
+
+jobs:
+  check-commit-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+        with:
+          fetch-depth: 0 # fetch all history for commitlint to work
+
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: latest
+
+      - name: Install commitlint
+        run: |
+          npm install commitlint@latest @commitlint/config-conventional
+
+      - name: Lint PR Title
+        run: echo "${{ github.event.pull_request.title }}" | npx commitlint --verbose
+
+      - name: Lint PR commits
+        if: github.event_name == 'pull_request' && github.event.action != 'edited'
+        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose

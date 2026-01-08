@@ -1,0 +1,23 @@
+name: Continuous Deployment
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  release:
+    outputs:
+      tag: ${{ steps.release.outputs.tag_name }}
+      released: ${{ steps.release.outputs.releases_created}}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Create release
+        if: github.event_name == 'push'
+        id: release
+        uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
+        with:
+          release-type: simple
