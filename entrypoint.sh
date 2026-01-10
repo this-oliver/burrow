@@ -249,7 +249,7 @@ EOF
     cat >> "$metadata_file" << EOF
 
 ## Notes
-- This backup was created automatically by the k8s-backup tool
+- This backup was created automatically by [burrow](https://github.com/this-oliver/burrow)
 - Source directory: $original_path
 - Absolute source path: $absolute_path
 - Backup name: $name
