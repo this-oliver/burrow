@@ -2,6 +2,17 @@
 # usage: ./entrypoint.sh [--config /path/to/config.json]
 # Backups up directories based on JSON configuration file.
 # Defaults to config.json in current directory.
+#
+# Configuration format:
+# {
+#   "output_dir": "/path/to/backup/output",  // Optional, defaults to current directory
+#   "backups": [
+#     {
+#       "name": "backup-name",
+#       "path": "/path/to/source"
+#     }
+#   ]
+# }
 
 set -euo pipefail
 
@@ -115,6 +126,20 @@ load_config() {
     # Get number of backups
     TOTAL_BACKUPS=$(jq '.backups | length' "$CONFIG_FILE")
 
+    # Load output directory from config (default to current directory)
+    OUTPUT_DIR=$(jq -r '.output_dir // "."' "$CONFIG_FILE")
+
+    # Convert to absolute path
+    local config_dir
+    config_dir=$(get_config_dir)
+    OUTPUT_DIR=$(to_absolute_path "$OUTPUT_DIR" "$config_dir")
+
+    # Create output directory if it doesn't exist
+    if [[ ! -d "$OUTPUT_DIR" ]]; then
+        echo "Creating output directory: $OUTPUT_DIR"
+        mkdir -p "$OUTPUT_DIR"
+    fi
+
     if [[ $TOTAL_BACKUPS -eq 0 ]]; then
         echo -e "${YELLOW}Warning: No backups configured in '$CONFIG_FILE'.${NC}"
         exit 0
@@ -135,9 +160,10 @@ process_backup() {
     config_dir=$(get_config_dir)
 
     # Extract required fields
-    local name path
+    local name path output_dir
     name=$(echo "$backup_config" | jq -r '.name')
     path=$(echo "$backup_config" | jq -r '.path')
+    output_dir=$(echo "$backup_config" | jq -r '.output_dir // "."')
 
     # Extract optional remote fields
     local remote_ip username port key
@@ -156,10 +182,17 @@ process_backup() {
     fi
 
     # Convert to absolute paths
-    local absolute_path absolute_key
+    local absolute_path absolute_key absolute_output_dir
     absolute_path=$(to_absolute_path "$path" "$config_dir")
+    absolute_output_dir=$(to_absolute_path "$output_dir" "$config_dir")
     if [[ -n "$key" && "$key" != "null" ]]; then
         absolute_key=$(to_absolute_path "$key" "$HOME")
+    fi
+
+    # Create output directory if it doesn't exist
+    if [[ ! -d "$absolute_output_dir" ]]; then
+        echo "  Creating output directory: $absolute_output_dir"
+        mkdir -p "$absolute_output_dir"
     fi
 
     # Make name optional with fallback to absolute path basename
@@ -171,9 +204,9 @@ process_backup() {
 
     # Determine backup type and execute
     if [[ -n "$remote_ip" && "$remote_ip" != "null" ]]; then
-        backup_remote_directory "$name" "$path" "$absolute_path" "$remote_ip" "$username" "$port" "$absolute_key" "$((backup_index + 1))"
+        backup_remote_directory "$name" "$path" "$absolute_path" "$remote_ip" "$username" "$port" "$absolute_key" "$((backup_index + 1))" "$absolute_output_dir"
     else
-        backup_local_directory "$name" "$path" "$absolute_path" "$((backup_index + 1))"
+        backup_local_directory "$name" "$path" "$absolute_path" "$((backup_index + 1))" "$absolute_output_dir"
     fi
 }
 
@@ -270,6 +303,7 @@ backup_local_directory() {
     local original_path="$2"     # Original path from config
     local absolute_path="$3"      # Resolved absolute path
     local backup_num="$4"
+    local absolute_output_dir="$5"
 
     # Verify directory exists
     if [[ ! -d "$absolute_path" ]]; then
@@ -307,8 +341,8 @@ backup_local_directory() {
     mv "$(basename "$absolute_path")" "$zip_name"
 
     # Create zip file
-    if zip -rq "$current_dir/$zip_filename" "$zip_name"; then
-        local result="✓ Backup $backup_num: $name ('$original_path') → $zip_filename"
+    if zip -rq "$absolute_output_dir/$zip_filename" "$zip_name"; then
+        local result="✓ Backup $backup_num: $name ('$original_path') → $absolute_output_dir/$zip_filename"
         BACKUP_RESULTS+=("$result")
         echo -e "${GREEN}$result${NC}"
         ((SUCCESSFUL_BACKUPS++))
@@ -340,6 +374,7 @@ backup_remote_directory() {
     local port="$6"
     local absolute_key="$7"        # Resolved absolute key path
     local backup_num="$8"
+    local absolute_output_dir="$9"
 
     # Validate SSH key if provided
     local auth_method="Default SSH keys"
@@ -425,8 +460,8 @@ backup_remote_directory() {
     mv "$(basename "$absolute_path")" "$zip_name"
 
     # Create zip file
-    if zip -rq "$current_dir/$zip_filename" "$zip_name"; then
-        local result="✓ Backup $backup_num: $name ('$original_path' from $remote_ip) -> $zip_filename"
+    if zip -rq "$absolute_output_dir/$zip_filename" "$zip_name"; then
+        local result="✓ Backup $backup_num: $name ('$original_path' from $remote_ip) -> $absolute_output_dir/$zip_filename"
         BACKUP_RESULTS+=("$result")
         echo -e "${GREEN}$result${NC}"
         ((SUCCESSFUL_BACKUPS++))
