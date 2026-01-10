@@ -42,6 +42,10 @@ get_config_dir() {
     fi
 }
 
+get_current_time() {
+    echo "$(date +%Y_%m_%d_%H_%M_%S)"
+}
+
 # 1. Check for required dependencies
 check_dependencies() {
     local missing_deps=()
@@ -278,7 +282,7 @@ backup_local_directory() {
 
     # Generate filename using name field
     local timestamp zip_name
-    timestamp=$(date +%Y%m%d_%H%M%S)
+    timestamp=$(get_current_time)
     zip_name="${name}_${timestamp}.zip"
 
     # Create temporary directory for metadata
@@ -401,7 +405,7 @@ backup_remote_directory() {
 
     # Generate filename using name field
     local timestamp zip_name
-    timestamp=$(date +%Y%m%d_%H%M%S)
+    timestamp=$(get_current_time)
     zip_name="${name}_${timestamp}.zip"
 
     # Generate backup metadata
