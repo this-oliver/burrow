@@ -21,7 +21,7 @@ NC='\033[0m' # No Color
 to_absolute_path() {
     local path="$1"
     local base_dir="$2"
-    
+
     # Already absolute
     if [[ "$path" = /* ]]; then
         echo "$path"
@@ -45,13 +45,13 @@ get_config_dir() {
 # 1. Check for required dependencies
 check_dependencies() {
     local missing_deps=()
-    
+
     for cmd in jq rsync zip; do
         if ! command -v "$cmd" &> /dev/null; then
             missing_deps+=("$cmd")
         fi
     done
-    
+
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
         echo -e "${RED}Error: Missing required dependencies: ${missing_deps[*]}${NC}"
         echo "Please install the missing tools and try again."
@@ -62,7 +62,7 @@ check_dependencies() {
 # 2. Parse command line arguments
 parse_arguments() {
     CONFIG_FILE="config.json"
-    
+
     while [[ $# -gt 0 ]]; do
         case $1 in
             --config|-c)
@@ -82,7 +82,7 @@ parse_arguments() {
                 ;;
         esac
     done
-    
+
     # Convert config path to absolute if it exists
     if [[ -f "$CONFIG_FILE" ]]; then
         CONFIG_FILE=$(realpath "$CONFIG_FILE")
@@ -95,27 +95,27 @@ load_config() {
         echo -e "${RED}Error: Configuration file '$CONFIG_FILE' not found.${NC}"
         exit 1
     fi
-    
+
     # Validate JSON structure
     if ! jq empty "$CONFIG_FILE" 2>/dev/null; then
         echo -e "${RED}Error: Configuration file is not valid JSON.${NC}"
         exit 1
     fi
-    
+
     # Check if backups array exists
     if ! jq -e '.backups' "$CONFIG_FILE" &>/dev/null; then
         echo -e "${RED}Error: Configuration file must contain a 'backups' array.${NC}"
         exit 1
     fi
-    
+
     # Get number of backups
     TOTAL_BACKUPS=$(jq '.backups | length' "$CONFIG_FILE")
-    
+
     if [[ $TOTAL_BACKUPS -eq 0 ]]; then
         echo -e "${YELLOW}Warning: No backups configured in '$CONFIG_FILE'.${NC}"
         exit 0
     fi
-    
+
     echo "Using configuration file: $CONFIG_FILE"
     echo "Found $TOTAL_BACKUPS backup configuration(s) in '$CONFIG_FILE'."
 }
@@ -125,23 +125,23 @@ process_backup() {
     local backup_index="$1"
     local backup_config
     backup_config=$(jq -c ".backups[$backup_index]" "$CONFIG_FILE")
-    
+
     # Get absolute paths for resolution
     local config_dir
     config_dir=$(get_config_dir)
-    
+
     # Extract required fields
     local name path
     name=$(echo "$backup_config" | jq -r '.name')
     path=$(echo "$backup_config" | jq -r '.path')
-    
+
     # Extract optional remote fields
     local remote_ip username port key
     remote_ip=$(echo "$backup_config" | jq -r '.remote.ip // empty')
     username=$(echo "$backup_config" | jq -r '.remote.username // empty')
     port=$(echo "$backup_config" | jq -r '.remote.port // "22"')
     key=$(echo "$backup_config" | jq -r '.remote.key // empty')
-    
+
     # Validate required path field
     if [[ -z "$path" || "$path" == "null" ]]; then
         local result="✗ Backup $((backup_index + 1)): Missing required 'path' field"
@@ -150,21 +150,21 @@ process_backup() {
         ((FAILED_BACKUPS++))
         return 1
     fi
-    
+
     # Convert to absolute paths
     local absolute_path absolute_key
     absolute_path=$(to_absolute_path "$path" "$config_dir")
     if [[ -n "$key" && "$key" != "null" ]]; then
         absolute_key=$(to_absolute_path "$key" "$HOME")
     fi
-    
+
     # Make name optional with fallback to absolute path basename
     if [[ -z "$name" || "$name" == "null" ]]; then
         name=$(basename "$absolute_path")
     fi
-    
+
     echo -e "${YELLOW}Processing backup $((backup_index + 1))/$TOTAL_BACKUPS: $name ('$path' → '$absolute_path')${NC}"
-    
+
     # Determine backup type and execute
     if [[ -n "$remote_ip" && "$remote_ip" != "null" ]]; then
         backup_remote_directory "$name" "$path" "$absolute_path" "$remote_ip" "$username" "$port" "$absolute_key" "$((backup_index + 1))"
@@ -184,14 +184,14 @@ generate_backup_metadata() {
     local zip_name="$7"
     local source_dir="$8"
     local metadata_file="$source_dir/BACKUP.md"
-    
+
     # Calculate archive statistics
     local file_count dir_count archive_size timestamp
     file_count=$(find "$source_dir" -type f | wc -l | tr -d ' ')
     dir_count=$(find "$source_dir" -type d | wc -l | tr -d ' ')
     archive_size=$(du -sh "$source_dir" | cut -f1)
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    
+
     # Create BACKUP.md content
     cat > "$metadata_file" << EOF
 # Backup Information
@@ -266,7 +266,7 @@ backup_local_directory() {
     local original_path="$2"     # Original path from config
     local absolute_path="$3"      # Resolved absolute path
     local backup_num="$4"
-    
+
     # Verify directory exists
     if [[ ! -d "$absolute_path" ]]; then
         local result="✗ Backup $backup_num: Directory '$original_path' ('$absolute_path') does not exist"
@@ -275,36 +275,36 @@ backup_local_directory() {
         ((FAILED_BACKUPS++))
         return 1
     fi
-    
+
     # Generate filename using name field
     local timestamp zip_name
     timestamp=$(date +%Y%m%d_%H%M%S)
     zip_name="${name}_${timestamp}.zip"
-    
+
     # Create temporary directory for metadata
     local temp_dir
     temp_dir=$(mktemp -d)
-    
+
     # Copy source directory to temp location
     local temp_source="$temp_dir/$(basename "$absolute_path")"
     cp -r "$absolute_path" "$temp_source"
-    
+
     # Generate backup metadata
     echo "  Generating backup metadata..."
     generate_backup_metadata "$name" "$original_path" "$absolute_path" "Local" "" "Local copy" "$zip_name" "$temp_source"
-    
+
     # Change to temp directory to create zip
     local current_dir
     current_dir=$(pwd)
     cd "$temp_dir"
-    
+
     # Create zip file
     if zip -rq "$current_dir/$zip_name" "$(basename "$absolute_path")"; then
         local result="✓ Backup $backup_num: $name ('$original_path') → $zip_name"
         BACKUP_RESULTS+=("$result")
         echo -e "${GREEN}$result${NC}"
         ((SUCCESSFUL_BACKUPS++))
-        
+
         # Change back to original directory and cleanup temp
         cd "$current_dir"
         rm -rf "$temp_dir"
@@ -313,7 +313,7 @@ backup_local_directory() {
         local result="✗ Backup $backup_num: Failed to create zip for '$name' ('$original_path')"
         BACKUP_RESULTS+=("$result")
         echo -e "${RED}$result${NC}"
-        
+
         # Change back to original directory and cleanup temp
         cd "$current_dir"
         rm -rf "$temp_dir"
@@ -332,7 +332,7 @@ backup_remote_directory() {
     local port="$6"
     local absolute_key="$7"        # Resolved absolute key path
     local backup_num="$8"
-    
+
     # Validate SSH key if provided
     local auth_method="Default SSH keys"
     if [[ -n "$absolute_key" && "$absolute_key" != "null" ]]; then
@@ -343,22 +343,22 @@ backup_remote_directory() {
             ((FAILED_BACKUPS++))
             return 1
         fi
-        
+
         # Check SSH key permissions
         local key_perms
         key_perms=$(stat -f "%Lp" "$absolute_key" 2>/dev/null || stat -c "%a" "$absolute_key" 2>/dev/null)
         if [[ "$key_perms" != "600" && "$key_perms" != "400" ]]; then
             echo -e "${YELLOW}Warning: SSH key '$(basename "$absolute_key")' ('$absolute_key') has insecure permissions ($key_perms). Recommended: 600${NC}"
         fi
-        
+
         auth_method="SSH key ($absolute_key)"
     fi
-    
+
     # Create temporary directory
     local temp_dir
     temp_dir=$(mktemp -d)
     local local_path="$temp_dir/$(basename "$absolute_path")"
-    
+
     # Build rsync command
     local rsync_cmd="rsync -az -e 'ssh -p $port"
     if [[ -n "$absolute_key" && "$absolute_key" != "null" ]]; then
@@ -368,16 +368,16 @@ backup_remote_directory() {
         rsync_cmd+=" -l $username"
     fi
     rsync_cmd+="'"
-    
+
     # Add source path
     if [[ -n "$username" && "$username" != "null" ]]; then
         rsync_cmd+=" $username@$remote_ip:$original_path"
     else
         rsync_cmd+=" $remote_ip:$original_path"
     fi
-    
+
     rsync_cmd+=" $local_path"
-    
+
     # Execute rsync
     echo "  Syncing remote directory to local temporary location..."
     if ! eval "$rsync_cmd"; then
@@ -388,7 +388,7 @@ backup_remote_directory() {
         ((FAILED_BACKUPS++))
         return 1
     fi
-    
+
     # Verify synced directory exists
     if [[ ! -d "$local_path" ]]; then
         local result="✗ Backup $backup_num: Remote directory '$original_path' ('$absolute_path') not found on server"
@@ -398,18 +398,21 @@ backup_remote_directory() {
         ((FAILED_BACKUPS++))
         return 1
     fi
-    
+
     # Generate filename using name field
     local timestamp zip_name
     timestamp=$(date +%Y%m%d_%H%M%S)
     zip_name="${name}_${timestamp}.zip"
-    
+
     # Generate backup metadata
     echo "  Generating backup metadata..."
     generate_backup_metadata "$name" "$original_path" "$absolute_path" "Remote" "$remote_ip" "$auth_method" "$zip_name" "$local_path"
-    
+
     # Create zip file
-    if zip -rq "$zip_name" "$local_path"; then
+    current_dir=$(pwd)
+    cd $temp_dir
+    mv "$(basename "$absolute_path")" "$name"
+    if zip -rq "$current_dir/$zip_name" "$name"; then
         local result="✓ Backup $backup_num: $name ('$original_path' from $remote_ip) -> $zip_name"
         BACKUP_RESULTS+=("$result")
         echo -e "${GREEN}$result${NC}"
@@ -420,8 +423,9 @@ backup_remote_directory() {
         echo -e "${RED}$result${NC}"
         ((FAILED_BACKUPS++))
     fi
-    
+
     # Cleanup temporary directory
+    cd $current_dir
     rm -rf "$temp_dir"
 }
 
@@ -429,7 +433,7 @@ backup_remote_directory() {
 print_summary() {
     echo
     echo -e "${YELLOW}=== Backup Summary ===${NC}"
-    
+
     for result in "${BACKUP_RESULTS[@]}"; do
         if [[ "$result" =~ ^✓ ]]; then
             echo -e "${GREEN}$result${NC}"
@@ -437,10 +441,10 @@ print_summary() {
             echo -e "${RED}$result${NC}"
         fi
     done
-    
+
     echo
     echo -e "${YELLOW}Total: $TOTAL_BACKUPS backups, $SUCCESSFUL_BACKUPS successful, $FAILED_BACKUPS failed${NC}"
-    
+
     if [[ $FAILED_BACKUPS -eq 0 ]]; then
         echo -e "${GREEN}All backups completed successfully!${NC}"
         exit 0
@@ -454,24 +458,24 @@ print_summary() {
 main() {
     echo "Starting backup process..."
     echo
-    
+
     # Check dependencies
     check_dependencies
-    
+
     # Parse arguments
     parse_arguments "$@"
-    
+
     # Load configuration
     load_config
-    
+
     echo
-    
+
     # Process all backups
     for ((i=0; i<TOTAL_BACKUPS; i++)); do
         process_backup "$i" || true
         echo
     done
-    
+
     # Print summary
     print_summary
 }
