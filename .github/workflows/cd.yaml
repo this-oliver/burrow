@@ -21,3 +21,38 @@ jobs:
         uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
         with:
           release-type: simple
+
+  build:
+    if: ${{ needs.release.outputs.released == 'true' }}
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # needs write permission to push tag and release
+      packages: write # needs write permission to publish Docker image
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Login to registry
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ${{ vars.REGISTRY_SERVER }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Build container image
+        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0
+        with:
+          push: true
+          context: .
+          tags: |
+            ${{ vars.REGISTRY_SERVER }}/${{ github.repository }}:latest
+            ${{ vars.REGISTRY_SERVER }}/${{ github.repository }}:${{ github.sha }}
+            ${{ vars.REGISTRY_SERVER }}/${{ github.repository }}:${{ needs.release.outputs.tag || 'latest' }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          platforms: linux/amd64,linux/arm64
