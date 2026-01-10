@@ -281,9 +281,10 @@ backup_local_directory() {
     fi
 
     # Generate filename using name field
-    local timestamp zip_name
+    local timestamp zip_name zip_filename
     timestamp=$(get_current_time)
-    zip_name="${name}_${timestamp}.zip"
+    zip_name="${name}_${timestamp}"
+    zip_filename="${zip_name}.zip"
 
     # Create temporary directory for metadata
     local temp_dir
@@ -295,16 +296,19 @@ backup_local_directory() {
 
     # Generate backup metadata
     echo "  Generating backup metadata..."
-    generate_backup_metadata "$name" "$original_path" "$absolute_path" "Local" "" "Local copy" "$zip_name" "$temp_source"
+    generate_backup_metadata "$name" "$original_path" "$absolute_path" "Local" "" "Local copy" "$zip_filename" "$temp_source"
 
     # Change to temp directory to create zip
     local current_dir
     current_dir=$(pwd)
     cd "$temp_dir"
 
+    # Rename directory being zipped to the name of the backup
+    mv "$(basename "$absolute_path")" "$zip_name"
+
     # Create zip file
-    if zip -rq "$current_dir/$zip_name" "$(basename "$absolute_path")"; then
-        local result="✓ Backup $backup_num: $name ('$original_path') → $zip_name"
+    if zip -rq "$current_dir/$zip_filename" "$zip_name"; then
+        local result="✓ Backup $backup_num: $name ('$original_path') → $zip_filename"
         BACKUP_RESULTS+=("$result")
         echo -e "${GREEN}$result${NC}"
         ((SUCCESSFUL_BACKUPS++))
@@ -404,20 +408,25 @@ backup_remote_directory() {
     fi
 
     # Generate filename using name field
-    local timestamp zip_name
+    local timestamp zip_name zip_filename
     timestamp=$(get_current_time)
-    zip_name="${name}_${timestamp}.zip"
+    zip_name="${name}_${timestamp}"
+    zip_filename="${zip_name}.zip"
 
     # Generate backup metadata
     echo "  Generating backup metadata..."
-    generate_backup_metadata "$name" "$original_path" "$absolute_path" "Remote" "$remote_ip" "$auth_method" "$zip_name" "$local_path"
+    generate_backup_metadata "$name" "$original_path" "$absolute_path" "Remote" "$remote_ip" "$auth_method" "$zip_filename" "$local_path"
 
-    # Create zip file
+    # Change to temp directory to create zip
     current_dir=$(pwd)
     cd $temp_dir
-    mv "$(basename "$absolute_path")" "$name"
-    if zip -rq "$current_dir/$zip_name" "$name"; then
-        local result="✓ Backup $backup_num: $name ('$original_path' from $remote_ip) -> $zip_name"
+
+    # Rename directory being zipped to the name of the backup
+    mv "$(basename "$absolute_path")" "$zip_name"
+
+    # Create zip file
+    if zip -rq "$current_dir/$zip_filename" "$zip_name"; then
+        local result="✓ Backup $backup_num: $name ('$original_path' from $remote_ip) -> $zip_filename"
         BACKUP_RESULTS+=("$result")
         echo -e "${GREEN}$result${NC}"
         ((SUCCESSFUL_BACKUPS++))
